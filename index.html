@@ -1,43 +1,138 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html>
 <head>
-<title>YouTube Transcript Chat</title>
+  <meta charset="utf-8" />
+  <title>YouTube Transcript Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* basic layout + WhatsApp-like bubbles + spinner */
+    body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+    .container { max-width: 900px; margin: auto; }
+    h2 { text-align: center; margin-bottom: 6px; }
+    .controls { display:flex; gap:8px; margin-bottom:10px; align-items:center; }
+    input[type="text"] { padding:10px; border-radius:6px; border:1px solid #ccc; flex:1; }
+    button { padding:10px 14px; border-radius:6px; border:none; background:#2563eb; color:#fff; cursor:pointer; }
+    button:disabled { opacity:0.6; cursor:not-allowed; }
+    #chat { background:#fff; height:480px; border-radius:10px; border:1px solid #ddd; padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
+    .bubble { max-width:75%; padding:10px 12px; border-radius:12px; }
+    .user { background:#dcf8c6; margin-left:auto; text-align:right; }
+    .bot { background:#f1f0f0; margin-right:auto; text-align:left; }
+    .meta { font-size:12px; color:#666; margin-bottom:6px; }
+    .typing { font-style:italic; color:gray; padding:8px; }
+    /* spinner */
+    .spinner { width:18px; height:18px; border:3px solid #ddd; border-top:3px solid #2563eb; border-radius:50%; animation:spin 1s linear infinite; display:inline-block; margin-left:8px; vertical-align:middle; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .footer { display:flex; gap:8px; margin-top:8px; }
+  </style>
 </head>
 <body>
-    <h2>YouTube Transcript Chat</h2>
-    <input id="yt_url" placeholder="Paste YouTube URL">
-    <button onclick="getTranscript()">Get Transcript</button>
-    <br><br>
-    <div id="chat"></div>
-    <input id="question" placeholder="Ask about transcript">
-    <button onclick="askQuestion()">Ask</button>
+  <div class="container">
+    <h2>🎥 YouTube Transcript Chat</h2>
 
-<script>
-let transcript = "";
+    <div class="controls">
+      <input id="yt_url" type="text" placeholder="Paste YouTube URL (youtu.be or youtube.com/watch?v=...)" />
+      <button id="fetchBtn" onclick="fetchTranscript()">Get Transcript</button>
+      <div id="fetchSpinner" style="display:none;"><span class="spinner"></span></div>
+    </div>
 
-async function getTranscript() {
-    const url = document.getElementById("yt_url").value;
-    let res = await fetch("/get_transcript", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({url})
-    });
-    let data = await res.json();
-    transcript = data.transcript;
-    document.getElementById("chat").innerHTML = "<p><b>System:</b> Transcript loaded.</p>";
-}
+    <div id="chat" aria-live="polite"></div>
 
-async function askQuestion() {
-    const question = document.getElementById("question").value;
-    let res = await fetch("/ask", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({question, transcript})
-    });
-    let data = await res.json();
-    document.getElementById("chat").innerHTML += `<p><b>You:</b> ${question}</p>`;
-    document.getElementById("chat").innerHTML += `<p><b>Bot:</b> ${data.answer}</p>`;
-}
-</script>
+    <div class="footer">
+      <input id="question" type="text" placeholder="Ask about the transcript..." style="flex:1;" onkeydown="if(event.key==='Enter') askQuestion()" />
+      <button id="askBtn" onclick="askQuestion()">Ask</button>
+      <div id="typingIndicator" style="display:none; align-self:center; color:gray; margin-left:6px;">Bot is typing…</div>
+    </div>
+  </div>
+
+  <script>
+    let transcript = "";
+    let chunks = null;
+
+    function appendBubble(role, text) {
+      const chat = document.getElementById("chat");
+      const wrapper = document.createElement("div");
+      const bubble = document.createElement("div");
+      bubble.className = "bubble " + (role === "user" ? "user" : "bot");
+      bubble.innerHTML = text;
+      wrapper.appendChild(bubble);
+      chat.appendChild(wrapper);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function setFetching(isLoading) {
+      document.getElementById("fetchBtn").disabled = isLoading;
+      document.getElementById("fetchSpinner").style.display = isLoading ? "inline-block" : "none";
+    }
+
+    function setTyping(isTyping) {
+      document.getElementById("askBtn").disabled = isTyping;
+      document.getElementById("typingIndicator").style.display = isTyping ? "inline-block" : "none";
+    }
+
+    async function fetchTranscript() {
+      const url = document.getElementById("yt_url").value.trim();
+      if (!url) {
+        alert("Please paste a YouTube URL.");
+        return;
+      }
+      setFetching(true);
+      appendBubble("bot", "<div class='meta'>System:</div> Fetching transcript...");
+      try {
+        const res = await fetch("/get_transcript", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to fetch transcript");
+        }
+        const data = await res.json();
+        transcript = data.transcript || "";
+        chunks = data.chunks || null;
+        // replace last system bubble with success
+        const chat = document.getElementById("chat");
+        // simple approach: add a success message
+        appendBubble("bot", "<div class='meta'>System:</div> Transcript loaded. You can now ask questions.");
+      } catch (err) {
+        appendBubble("bot", `<div class='meta'>System error:</div> ${err.message}`);
+      } finally {
+        setFetching(false);
+      }
+    }
+
+    async function askQuestion() {
+      const qInput = document.getElementById("question");
+      const q = qInput.value.trim();
+      if (!q) return;
+      if (!transcript) {
+        alert("Please fetch a transcript first.");
+        return;
+      }
+      appendBubble("user", q);
+      qInput.value = "";
+      setTyping(true);
+
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, transcript: transcript, chunks: chunks })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to get answer");
+        }
+        const data = await res.json();
+        const ans = data.answer || "I don't know — the transcript doesn't contain that information.";
+        appendBubble("bot", ans);
+      } catch (err) {
+        appendBubble("bot", `<div class='meta'>Error:</div> ${err.message}`);
+      } finally {
+        setTyping(false);
+      }
+    }
+  </script>
 </body>
 </html>
