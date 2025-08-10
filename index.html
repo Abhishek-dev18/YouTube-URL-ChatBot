@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>YouTube Transcript Chat</title>
+</head>
+<body>
+    <h2>YouTube Transcript Chat</h2>
+    <input id="yt_url" placeholder="Paste YouTube URL">
+    <button onclick="getTranscript()">Get Transcript</button>
+    <br><br>
+    <div id="chat"></div>
+    <input id="question" placeholder="Ask about transcript">
+    <button onclick="askQuestion()">Ask</button>
+
+<script>
+let transcript = "";
+
+async function getTranscript() {
+    const url = document.getElementById("yt_url").value;
+    let res = await fetch("/get_transcript", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({url})
+    });
+    let data = await res.json();
+    transcript = data.transcript;
+    document.getElementById("chat").innerHTML = "<p><b>System:</b> Transcript loaded.</p>";
+}
+
+async function askQuestion() {
+    const question = document.getElementById("question").value;
+    let res = await fetch("/ask", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({question, transcript})
+    });
+    let data = await res.json();
+    document.getElementById("chat").innerHTML += `<p><b>You:</b> ${question}</p>`;
+    document.getElementById("chat").innerHTML += `<p><b>Bot:</b> ${data.answer}</p>`;
+}
+</script>
+</body>
+</html>
