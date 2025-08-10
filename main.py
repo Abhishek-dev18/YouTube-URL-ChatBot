@@ -1,23 +1,27 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from youtube_transcript_api import YouTubeTranscriptApi
 import google.generativeai as genai
 import re
 import os
 
-# Configure Gemini API
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = FastAPI()
 
-# Allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve frontend
+@app.get("/")
+async def root():
+    return FileResponse("index.html")  # Must be in same folder as main.py
 
 def get_video_id(url):
     match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
@@ -38,7 +42,6 @@ async def ask(request: Request):
     question = data["question"]
 
     model = genai.GenerativeModel("gemini-pro")
-    prompt = f"Answer the following question using only the given transcript.\n\nTranscript:\n{transcript}\n\nQuestion: {question}\nAnswer:"
-
+    prompt = f"Answer using only the given transcript.\n\nTranscript:\n{transcript}\n\nQuestion: {question}\nAnswer:"
     response = model.generate_content(prompt)
     return {"answer": response.text}
