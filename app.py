@@ -56,10 +56,11 @@ def extract_video_id(url_or_id: str) -> str:
 def fetch_transcript(video_id: str) -> Tuple[str, List[dict]]:
     # Returns (full_text, segments)
     # segments: list of dicts with 'text' and 'start' (seconds)
-    transcript = YouTubeTranscriptApi.get_transcript(video_id)  # may raise exceptions
+    transcript = YouTubeTranscriptApi.fetch(video_id)  # may raise exceptions
     # transcript is a list of {"text": "...", "start": ..., "duration": ...}
     full_text = " ".join(segment["text"].strip() for segment in transcript)
     return full_text, transcript
+
 
 # Chunk text into roughly CHUNK_CHAR_SIZE sized chunks, but keep sentence boundaries if possible
 def chunk_text(text: str, chunk_size: int = CHUNK_CHAR_SIZE) -> List[str]:
